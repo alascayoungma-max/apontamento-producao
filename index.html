@@ -74,6 +74,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14
 .btn{width:100%;padding:13px;border:none;border-radius:var(--r2);font-family:var(--font);font-size:14px;font-weight:600;cursor:pointer;transition:opacity .15s;touch-action:manipulation}
 .btn:active{opacity:.8}
 .btn-g{background:var(--green);color:#0a1f0c}
+.btn-b{background:var(--blue);color:#0a1624}
 .btn-s{background:var(--card);border:1px solid var(--border);color:var(--text);margin-top:8px}
 .mgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
 .mc{background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:13px}
@@ -109,8 +110,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14
 .exp-log{background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px;font-size:12px;font-family:var(--mono);color:var(--text2);margin-top:12px;min-height:44px;display:none;line-height:1.7}
 .exp-log.on{display:block}
 .log-ok{color:var(--greentxt)}
-.log-err{color:var(--redtxt)}
-.log-info{color:var(--bluetxt)}
+.btn-novo{display:flex;align-items:center;gap:5px;background:var(--green);border:none;border-radius:var(--r2);color:#0a1f0c;font-family:var(--font);font-size:12px;font-weight:700;padding:6px 14px;cursor:pointer;touch-action:manipulation;white-space:nowrap}
+.btn-novo:active{opacity:.8}
 </style>
 </head>
 <body>
@@ -126,6 +127,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14
     <div id="tb-alert"></div>
   </div>
 
+  <!-- PEDIDOS -->
   <div class="scr on" id="scr-pedidos">
     <div class="sbar"><span class="sbar-ic">🔍</span><input type="text" placeholder="Pedido, cliente, produto…" id="srch" oninput="rPedidos()"></div>
     <div class="frow">
@@ -135,15 +137,20 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14
       <button class="fc" onclick="setF('No prazo',this)">🟢 No prazo</button>
       <button class="fc" onclick="setF('Concluído',this)">✅ Concluídos</button>
     </div>
-    <div class="slbl" id="p-count">—</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <div class="slbl" id="p-count" style="margin-bottom:0">—</div>
+      <button class="btn-novo" onclick="openNovoPedido()">+ Novo pedido</button>
+    </div>
     <div id="p-list"></div>
   </div>
 
+  <!-- APONTAMENTOS -->
   <div class="scr" id="scr-ap">
     <div class="slbl">Histórico de apontamentos</div>
     <div id="ap-list"></div>
   </div>
 
+  <!-- DASHBOARD -->
   <div class="scr" id="scr-dash">
     <div class="slbl">Resumo executivo</div>
     <div class="mgrid" id="d-metrics"></div>
@@ -153,13 +160,14 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14
     <div id="d-recent"></div>
   </div>
 
+  <!-- EXPORTAR -->
   <div class="scr" id="scr-export">
     <div class="exp-card">
       <div style="font-size:32px;text-align:center;margin-bottom:10px">📊</div>
       <div style="font-size:14px;font-weight:600;text-align:center;margin-bottom:4px">Exportar relatório Excel</div>
       <div style="font-size:12px;color:var(--text2);text-align:center;margin-bottom:14px;line-height:1.5">Gera um arquivo .csv com todos os dados,<br>compatível com Excel e Google Sheets.</div>
       <div id="exp-preview" style="margin-bottom:16px"></div>
-      <button class="btn btn-xl" id="btn-export" onclick="exportarCSV()">⬇️ Baixar planilha</button>
+      <button class="btn btn-xl" onclick="exportarCSV()">⬇️ Baixar planilha</button>
       <div class="exp-log" id="exp-log"></div>
     </div>
   </div>
@@ -172,6 +180,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14
   </nav>
 </div>
 
+<!-- MODAL APONTAMENTO -->
 <div class="ov" id="modal" onclick="ovClick(event)">
   <div class="mdl" id="mdl-body">
     <div class="mhnd"></div>
@@ -203,6 +212,31 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14
   </div>
 </div>
 
+<!-- MODAL NOVO PEDIDO -->
+<div class="ov" id="modal-novo" onclick="ovClickNovo(event)">
+  <div class="mdl">
+    <div class="mhnd"></div>
+    <div class="mtit">Novo Pedido</div>
+    <div class="msub">Cadastre uma nova ordem de produção</div>
+    <div class="fld"><label>Número do Pedido / OP</label><input type="text" id="n-id" placeholder="Ex: 702"></div>
+    <div class="fld"><label>Cliente</label><input type="text" id="n-cliente" placeholder="Nome do cliente"></div>
+    <div class="fld"><label>Produto</label><input type="text" id="n-produto" placeholder="Ex: Poste dt 11/300"></div>
+    <div class="fld"><label>Quantidade pedida</label><input type="number" id="n-qtd" placeholder="Ex: 50" min="1"></div>
+    <div class="fld"><label>Unidade</label>
+      <select id="n-unid">
+        <option value="und">und (unidade)</option>
+        <option value="m">m (metro)</option>
+        <option value="kg">kg (quilo)</option>
+        <option value="m2">m2 (metro quadrado)</option>
+      </select>
+    </div>
+    <div class="fld"><label>Data do pedido</label><input type="date" id="n-datapd"></div>
+    <div class="fld"><label>Prazo de entrega</label><input type="date" id="n-prazo"></div>
+    <button class="btn btn-b" onclick="salvarNovoPedido()">+ Cadastrar pedido</button>
+    <button class="btn btn-s" onclick="closeNovoPedido()">Cancelar</button>
+  </div>
+</div>
+
 <script>
 const PEDIDOS_BASE=[
   {id:'657',produto:'Cx de passagem',cliente:'FTE',qtdPedida:60,unid:'und',dataPedido:'2026-05-11',prazoEntrega:'2026-05-21',qtdProduzida:0},
@@ -217,6 +251,9 @@ const PEDIDOS_BASE=[
 ];
 
 let pedidos=[], apontamentos=[], curFilter='todos', editingId=null, qty=0, turno='Manhã';
+
+// Ordem de prioridade: Atrasado primeiro, Concluído por último
+const ORDEM_STATUS={'Atrasado':0,'Em risco':1,'No prazo':2,'Concluído':3};
 
 function hoje(){return new Date().toISOString().slice(0,10)}
 function fmtDate(d){if(!d)return'—';const p=d.split('-');return p[2]+'/'+p[1]+'/'+p[0]}
@@ -266,12 +303,18 @@ function showToast(msg){
   document.body.appendChild(t);setTimeout(()=>t.remove(),2400);
 }
 
+// ===== PEDIDOS — ordenados por prioridade automaticamente =====
 function rPedidos(){
   const q=(document.getElementById('srch').value||'').toLowerCase();
   const list=pedidos.filter(p=>{
     const s=calcStatus(p);
     return(curFilter==='todos'||s===curFilter)&&(!q||p.id.toLowerCase().includes(q)||p.cliente.toLowerCase().includes(q)||p.produto.toLowerCase().includes(q));
+  }).sort((a,b)=>{
+    // Ordena: Atrasado(0) > Em risco(1) > No prazo(2) > Concluído(3)
+    const sa=calcStatus(a), sb=calcStatus(b);
+    return (ORDEM_STATUS[sa]??9)-(ORDEM_STATUS[sb]??9);
   });
+
   document.getElementById('p-count').textContent=list.length+' pedidos';
   const el=document.getElementById('p-list');
   if(!list.length){el.innerHTML='<div class="empty">📭 Nenhum pedido encontrado</div>';return;}
@@ -287,6 +330,7 @@ function rPedidos(){
   }).join('');
 }
 
+// ===== MODAL APONTAMENTO =====
 function openModal(id){
   const p=pedidos.find(x=>x.id===id);if(!p)return;
   editingId=id;qty=0;
@@ -328,6 +372,38 @@ function salvar(){
   showToast('✓ Apontamento registrado!');
 }
 
+// ===== MODAL NOVO PEDIDO =====
+function openNovoPedido(){
+  document.getElementById('n-id').value='';
+  document.getElementById('n-cliente').value='';
+  document.getElementById('n-produto').value='';
+  document.getElementById('n-qtd').value='';
+  document.getElementById('n-unid').value='und';
+  document.getElementById('n-datapd').value=hoje();
+  document.getElementById('n-prazo').value='';
+  document.getElementById('modal-novo').classList.add('on');
+}
+function closeNovoPedido(){document.getElementById('modal-novo').classList.remove('on');}
+function ovClickNovo(e){if(e.target===document.getElementById('modal-novo'))closeNovoPedido();}
+
+function salvarNovoPedido(){
+  const id=document.getElementById('n-id').value.trim();
+  const cliente=document.getElementById('n-cliente').value.trim();
+  const produto=document.getElementById('n-produto').value.trim();
+  const qtd=parseInt(document.getElementById('n-qtd').value)||0;
+  const unid=document.getElementById('n-unid').value;
+  const dataPedido=document.getElementById('n-datapd').value||hoje();
+  const prazoEntrega=document.getElementById('n-prazo').value;
+  if(!id||!cliente||!produto||qtd<=0||!prazoEntrega){showToast('⚠️ Preencha todos os campos!');return;}
+  if(pedidos.find(p=>p.id===id)){showToast('⚠️ Já existe um pedido com esse número!');return;}
+  pedidos.push({id,produto,cliente,qtdPedida:qtd,unid,dataPedido,prazoEntrega,qtdProduzida:0});
+  savePedidos();
+  closeNovoPedido();
+  rPedidos();
+  showToast('✅ Pedido #'+id+' cadastrado!');
+}
+
+// ===== APONTAMENTOS =====
 function rApontamentos(){
   const el=document.getElementById('ap-list');
   if(!apontamentos.length){el.innerHTML='<div class="empty">📝 Nenhum apontamento ainda</div>';return;}
@@ -346,6 +422,7 @@ function rApontamentos(){
   }).join('');
 }
 
+// ===== DASHBOARD =====
 function rDash(){
   const total=pedidos.length;
   const conc=pedidos.filter(p=>calcStatus(p)==='Concluído').length;
@@ -371,6 +448,7 @@ function rDash(){
   }).join('');
 }
 
+// ===== EXPORTAR =====
 function rExport(){
   const conc=pedidos.filter(p=>calcStatus(p)==='Concluído').length;
   document.getElementById('exp-preview').innerHTML=`
@@ -395,9 +473,10 @@ function exportarCSV(){
   document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
   const log=document.getElementById('exp-log');
   log.className='exp-log on';
-  log.innerHTML='<span class="log-ok">✓ Arquivo baixado com sucesso!</span><br><span style="color:var(--text3)">Abra no Excel → Arquivo → Salvar como → .xlsx</span>';
+  log.innerHTML='<span class="log-ok">✓ Arquivo baixado! Abra no Excel → Salvar como → .xlsx</span>';
 }
 
+// ===== TOPBAR =====
 function updateTopbar(){
   const n=new Date();
   document.getElementById('tb-date').textContent=n.toLocaleDateString('pt-BR',{weekday:'short',day:'numeric',month:'short'})+' · '+n.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
