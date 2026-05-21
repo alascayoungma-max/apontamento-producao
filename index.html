@@ -111,10 +111,12 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14
 .exp-log.on{display:block}
 .log-ok{color:var(--greentxt)}
 .btn-novo{display:flex;align-items:center;gap:5px;background:var(--green);border:none;border-radius:var(--r2);color:#0a1f0c;font-family:var(--font);font-size:12px;font-weight:700;padding:6px 14px;cursor:pointer;touch-action:manipulation;white-space:nowrap}
-.btn-novo:active{opacity:.8}
+.sync-bar{background:var(--bluebg);border-bottom:1px solid var(--blue);padding:6px 16px;font-size:11px;color:var(--bluetxt);text-align:center;display:none}
+.sync-bar.on{display:block}
 </style>
 </head>
 <body>
+<div class="sync-bar" id="sync-bar">🔄 Sincronizando com a nuvem...</div>
 <div class="app">
   <div class="topbar">
     <div class="tb-left">
@@ -124,10 +126,12 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14
         <div class="tb-sub" id="tb-date">—</div>
       </div>
     </div>
-    <div id="tb-alert"></div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <div id="sync-status" style="font-size:10px;color:var(--text3)">☁️ nuvem</div>
+      <div id="tb-alert"></div>
+    </div>
   </div>
 
-  <!-- PEDIDOS -->
   <div class="scr on" id="scr-pedidos">
     <div class="sbar"><span class="sbar-ic">🔍</span><input type="text" placeholder="Pedido, cliente, produto…" id="srch" oninput="rPedidos()"></div>
     <div class="frow">
@@ -144,13 +148,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14
     <div id="p-list"></div>
   </div>
 
-  <!-- APONTAMENTOS -->
   <div class="scr" id="scr-ap">
     <div class="slbl">Histórico de apontamentos</div>
     <div id="ap-list"></div>
   </div>
 
-  <!-- DASHBOARD -->
   <div class="scr" id="scr-dash">
     <div class="slbl">Resumo executivo</div>
     <div class="mgrid" id="d-metrics"></div>
@@ -160,7 +162,6 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14
     <div id="d-recent"></div>
   </div>
 
-  <!-- EXPORTAR -->
   <div class="scr" id="scr-export">
     <div class="exp-card">
       <div style="font-size:32px;text-align:center;margin-bottom:10px">📊</div>
@@ -237,7 +238,25 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14
   </div>
 </div>
 
-<script>
+<!-- Firebase SDK -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
+import { getFirestore, collection, doc, setDoc, onSnapshot, addDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+
+// ===== CONFIGURAÇÃO FIREBASE =====
+const firebaseConfig = {
+  apiKey: "AIzaSyD-whKWwiLo_D43XDWqAE275HollpG1QSA",
+  authDomain: "apontamento-producao-d5716.firebaseapp.com",
+  projectId: "apontamento-producao-d5716",
+  storageBucket: "apontamento-producao-d5716.firebasestorage.app",
+  messagingSenderId: "401986547343",
+  appId: "1:401986547343:web:a9f1bbe226cead6ad0cafa"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+// ===== DADOS =====
 const PEDIDOS_BASE=[
   {id:'657',produto:'Cx de passagem',cliente:'FTE',qtdPedida:60,unid:'und',dataPedido:'2026-05-11',prazoEntrega:'2026-05-21',qtdProduzida:0},
   {id:'663a',produto:'Poste dt 11/300',cliente:'Anavilhanas',qtdPedida:38,unid:'und',dataPedido:'2026-05-14',prazoEntrega:'2026-05-19',qtdProduzida:20},
@@ -251,8 +270,6 @@ const PEDIDOS_BASE=[
 ];
 
 let pedidos=[], apontamentos=[], curFilter='todos', editingId=null, qty=0, turno='Manhã';
-
-// Ordem de prioridade: Atrasado primeiro, Concluído por último
 const ORDEM_STATUS={'Atrasado':0,'Em risco':1,'No prazo':2,'Concluído':3};
 
 function hoje(){return new Date().toISOString().slice(0,10)}
@@ -279,13 +296,42 @@ function diasRestantes(prazo){
   return Math.round((p-n)/86400000);
 }
 
-function loadDB(){
-  try{pedidos=JSON.parse(localStorage.getItem('producao_pedidos')||'null')||[...PEDIDOS_BASE];}catch{pedidos=[...PEDIDOS_BASE];}
-  try{apontamentos=JSON.parse(localStorage.getItem('producao_apontamentos')||'[]');}catch{apontamentos=[];}
-}
-function savePedidos(){localStorage.setItem('producao_pedidos',JSON.stringify(pedidos));}
-function saveAps(){localStorage.setItem('producao_apontamentos',JSON.stringify(apontamentos));}
+// ===== FIREBASE: escuta em tempo real =====
+function iniciarSync(){
+  document.getElementById('sync-status').textContent='☁️ conectando...';
 
+  // Escuta pedidos em tempo real
+  onSnapshot(collection(db,'pedidos'), snap=>{
+    if(snap.empty){
+      // Primeira vez: carrega dados base
+      PEDIDOS_BASE.forEach(p=>setDoc(doc(db,'pedidos',p.id),p));
+    } else {
+      pedidos = snap.docs.map(d=>d.data());
+      rPedidos();
+      updateTopbar();
+      document.getElementById('sync-status').textContent='☁️ online';
+    }
+  });
+
+  // Escuta apontamentos em tempo real
+  const qAp = query(collection(db,'apontamentos'), orderBy('timestamp','desc'));
+  onSnapshot(qAp, snap=>{
+    apontamentos = snap.docs.map(d=>({...d.data(), docId:d.id}));
+    const scrAp = document.getElementById('scr-ap');
+    if(scrAp.classList.contains('on')) rApontamentos();
+    const scrDash = document.getElementById('scr-dash');
+    if(scrDash.classList.contains('on')) rDash();
+  });
+}
+
+async function savePedido(p){
+  await setDoc(doc(db,'pedidos',p.id), p);
+}
+async function saveApontamento(ap){
+  await addDoc(collection(db,'apontamentos'), ap);
+}
+
+// ===== UI =====
 function showScr(name,btn){
   document.querySelectorAll('.scr').forEach(s=>s.classList.remove('on'));
   document.getElementById('scr-'+name).classList.add('on');
@@ -295,25 +341,27 @@ function showScr(name,btn){
   if(name==='ap') rApontamentos();
   if(name==='export') rExport();
 }
+window.showScr=showScr;
+
 function setF(f,el){curFilter=f;document.querySelectorAll('.fc').forEach(c=>c.classList.remove('on'));el.classList.add('on');rPedidos();}
+window.setF=setF;
+
 function setTurno(t,el){turno=t;document.querySelectorAll('.tpill').forEach(p=>p.classList.remove('on'));el.classList.add('on');}
+window.setTurno=setTurno;
+
 function showToast(msg){
   document.getElementById('t-el')?.remove();
   const t=document.createElement('div');t.id='t-el';t.className='toast';t.textContent=msg;
   document.body.appendChild(t);setTimeout(()=>t.remove(),2400);
 }
 
-// ===== PEDIDOS — ordenados por prioridade automaticamente =====
+// ===== PEDIDOS =====
 function rPedidos(){
   const q=(document.getElementById('srch').value||'').toLowerCase();
   const list=pedidos.filter(p=>{
     const s=calcStatus(p);
     return(curFilter==='todos'||s===curFilter)&&(!q||p.id.toLowerCase().includes(q)||p.cliente.toLowerCase().includes(q)||p.produto.toLowerCase().includes(q));
-  }).sort((a,b)=>{
-    // Ordena: Atrasado(0) > Em risco(1) > No prazo(2) > Concluído(3)
-    const sa=calcStatus(a), sb=calcStatus(b);
-    return (ORDEM_STATUS[sa]??9)-(ORDEM_STATUS[sb]??9);
-  });
+  }).sort((a,b)=>(ORDEM_STATUS[calcStatus(a)]??9)-(ORDEM_STATUS[calcStatus(b)]??9));
 
   document.getElementById('p-count').textContent=list.length+' pedidos';
   const el=document.getElementById('p-list');
@@ -351,26 +399,34 @@ function openModal(id){
   document.getElementById('modal').classList.add('on');
   document.getElementById('mdl-body').scrollTop=0;
 }
+window.openModal=openModal;
+
 function chQty(d){
   const p=pedidos.find(x=>x.id===editingId);if(!p)return;
   qty=Math.max(0,Math.min(p.qtdPedida-p.qtdProduzida,qty+d));
   document.getElementById('qty-v').textContent=qty;
 }
-function closeModal(){document.getElementById('modal').classList.remove('on');}
-function ovClick(e){if(e.target===document.getElementById('modal'))closeModal();}
+window.chQty=chQty;
 
-function salvar(){
+function closeModal(){document.getElementById('modal').classList.remove('on');}
+window.closeModal=closeModal;
+function ovClick(e){if(e.target===document.getElementById('modal'))closeModal();}
+window.ovClick=ovClick;
+
+async function salvar(){
   const p=pedidos.find(x=>x.id===editingId);
   if(!p||qty<=0){showToast('⚠️ Informe a quantidade produzida');return;}
   const op=document.getElementById('f-op').value.trim()||'Operador';
   const data=document.getElementById('f-data').value||hoje();
   const obs=document.getElementById('f-obs').value.trim();
   p.qtdProduzida=Math.min(p.qtdPedida,p.qtdProduzida+qty);
-  apontamentos.unshift({id:Date.now().toString(),pedidoId:p.id,cliente:p.cliente,produto:p.produto,unid:p.unid,qtd:qty,turno,operador:op,data,obs,timestamp:new Date().toISOString(),statusDepois:calcStatus(p)});
-  savePedidos();saveAps();
-  closeModal();rPedidos();updateTopbar();
-  showToast('✓ Apontamento registrado!');
+  const ap={pedidoId:p.id,cliente:p.cliente,produto:p.produto,unid:p.unid,qtd:qty,turno,operador:op,data,obs,timestamp:new Date().toISOString(),statusDepois:calcStatus(p)};
+  await savePedido(p);
+  await saveApontamento(ap);
+  closeModal();
+  showToast('✓ Apontamento salvo na nuvem!');
 }
+window.salvar=salvar;
 
 // ===== MODAL NOVO PEDIDO =====
 function openNovoPedido(){
@@ -383,10 +439,13 @@ function openNovoPedido(){
   document.getElementById('n-prazo').value='';
   document.getElementById('modal-novo').classList.add('on');
 }
+window.openNovoPedido=openNovoPedido;
 function closeNovoPedido(){document.getElementById('modal-novo').classList.remove('on');}
+window.closeNovoPedido=closeNovoPedido;
 function ovClickNovo(e){if(e.target===document.getElementById('modal-novo'))closeNovoPedido();}
+window.ovClickNovo=ovClickNovo;
 
-function salvarNovoPedido(){
+async function salvarNovoPedido(){
   const id=document.getElementById('n-id').value.trim();
   const cliente=document.getElementById('n-cliente').value.trim();
   const produto=document.getElementById('n-produto').value.trim();
@@ -396,12 +455,12 @@ function salvarNovoPedido(){
   const prazoEntrega=document.getElementById('n-prazo').value;
   if(!id||!cliente||!produto||qtd<=0||!prazoEntrega){showToast('⚠️ Preencha todos os campos!');return;}
   if(pedidos.find(p=>p.id===id)){showToast('⚠️ Já existe um pedido com esse número!');return;}
-  pedidos.push({id,produto,cliente,qtdPedida:qtd,unid,dataPedido,prazoEntrega,qtdProduzida:0});
-  savePedidos();
+  const novoPedido={id,produto,cliente,qtdPedida:qtd,unid,dataPedido,prazoEntrega,qtdProduzida:0};
+  await savePedido(novoPedido);
   closeNovoPedido();
-  rPedidos();
-  showToast('✅ Pedido #'+id+' cadastrado!');
+  showToast('✅ Pedido #'+id+' cadastrado na nuvem!');
 }
+window.salvarNovoPedido=salvarNovoPedido;
 
 // ===== APONTAMENTOS =====
 function rApontamentos(){
@@ -456,6 +515,7 @@ function rExport(){
     <div class="aba-item"><span class="aba-icon">📝</span><div class="aba-info"><div class="aba-name">Apontamento Diário</div><div class="aba-desc">Registros com turno, operador e obs.</div></div><span class="aba-badge">${apontamentos.length} linhas</span></div>
     <div class="aba-item"><span class="aba-icon">📊</span><div class="aba-info"><div class="aba-name">Dashboard</div><div class="aba-desc">Resumo executivo</div></div><span class="aba-badge">${conc} concluídos</span></div>`;
 }
+window.rExport=rExport;
 
 function exportarCSV(){
   const h1=['Nº OP','Produto','Cliente','Qtd Pedida','Unid','Data Pedido','Prazo Entrega','Qtd Produzida','% Concluído','Saldo','Status'];
@@ -475,6 +535,7 @@ function exportarCSV(){
   log.className='exp-log on';
   log.innerHTML='<span class="log-ok">✓ Arquivo baixado! Abra no Excel → Salvar como → .xlsx</span>';
 }
+window.exportarCSV=exportarCSV;
 
 // ===== TOPBAR =====
 function updateTopbar(){
@@ -484,7 +545,8 @@ function updateTopbar(){
   document.getElementById('tb-alert').innerHTML=atr>0?`<div class="tb-badge">${atr} atras.</div>`:'';
 }
 
-loadDB();updateTopbar();rPedidos();
+updateTopbar();
+iniciarSync();
 setInterval(updateTopbar,30000);
 </script>
 </body>
